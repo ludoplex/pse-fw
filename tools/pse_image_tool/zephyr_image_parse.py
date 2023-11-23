@@ -39,18 +39,13 @@ if __name__ == "__main__":
 
     f_map = open("./fragments/zephyr.map");
     for line in f_map:
-        match = memory_re.match(line)
-        if match:
+        if match := memory_re.match(line):
             print(line.rstrip())
-            to_discard = 0
             origin = int(match.group(2), 16)
             length = int(match.group(3), 16)
             if length == 0:
                 continue
-            for item in memory:
-                if item[1] == origin:
-                    to_discard = 1
-                    break
+            to_discard = next((1 for item in memory if item[1] == origin), 0)
             if to_discard == 0:
                 memory.append([match.group(1), origin, length])
 
@@ -64,20 +59,16 @@ if __name__ == "__main__":
                CROSS_COMPILE_TARGET + '-readelf'
 
     Command = [readelf, '-l', './fragments/zephyr.elf']
-    f_seg1 = open("./fragments/segments.txt", 'w+')
-    Process = subprocess.Popen (Command, stdout=f_seg1, shell = False)
-    Result = Process.communicate()
-    f_seg1.close()
-
+    with open("./fragments/segments.txt", 'w+') as f_seg1:
+        Process = subprocess.Popen (Command, stdout=f_seg1, shell = False)
+        Result = Process.communicate()
     f_seg = open("./fragments/segments.txt")
     for line in f_seg:
-        match = ph_re.match(line.rstrip())
-        if match:
+        if match := ph_re.match(line.rstrip()):
             fsize.append(int(match.group(5), 16))
             phy_addr.append(int(match.group(4), 16))
 
-        match = map_re.match(line.rstrip())
-        if match:
+        if match := map_re.match(line.rstrip()):
             sections.append(' -j ' + match.group(2).replace(" ", " -j "))
 
     for n in range(1, len(fsize)):
@@ -86,10 +77,7 @@ if __name__ == "__main__":
         for item in memory:
             if (phy_addr[n] >= item[1]) and \
                    ((phy_addr[n] + fsize[n]) <= (item[1] + item[2])):
-                if item[0] == 'L2SRAM':
-                    out_bin = 'sram'
-                else:
-                    out_bin = item[0]
+                out_bin = 'sram' if item[0] == 'L2SRAM' else item[0]
                 if out_bin in bin_dic:
                     bin_dic[out_bin] = bin_dic[out_bin] + sections[n]
                 else:
@@ -97,17 +85,16 @@ if __name__ == "__main__":
                     bin_start_dic[out_bin] = phy_addr[n]
 
     f_seg_start = open("./fragments/seg_start.txt", "w")
-    for key in bin_dic.keys():
-        f_seg_start.write(key + ' ' + hex(bin_start_dic[key]) + '\n')
-        Command = obj_copy + ' -S -Obinary ' + bin_dic[key] + ' ' + f_elf + \
-		  ' ./fragments/' + key.lower() + '.bin'
+    for key in bin_dic:
+        f_seg_start.write(f'{key} {hex(bin_start_dic[key])}' + '\n')
+        Command = f'{obj_copy} -S -Obinary {bin_dic[key]} {f_elf} ./fragments/{key.lower()}.bin'
         Process = subprocess.Popen (Command.split(), stdin=subprocess.PIPE,
-			stdout = subprocess.PIPE, stderr = subprocess.PIPE,
-			shell = False)
+        stdout = subprocess.PIPE, stderr = subprocess.PIPE,
+        shell = False)
         Result = Process.communicate()
 
     Command="ls -l ./fragments/"
     process = subprocess.Popen(Command.split(), stdin=subprocess.PIPE,
-		    stdout=subprocess.PIPE, shell=False)
+    stdout=subprocess.PIPE, shell=False)
     output = process.stdout.read()
     print (output.decode())

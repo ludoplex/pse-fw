@@ -44,7 +44,7 @@ def main():
         device_id = sys.argv[2]
         device_key = sys.argv[3]
         username, password = _generate_credentials(scope_id, device_id, device_key)
-        print("{}\n{}".format(username, password))
+        print(f"{username}\n{password}")
     else:
         logger.error("Not enough arguments!")
         logger.error("Usage: python azure_credentials.py [scope_id] [device_id] [device_key]")
@@ -58,7 +58,7 @@ def _generate_credentials(scope_id, device_id, device_key):
     """
 
     hostname = _retrieve_hostname(scope_id, device_id, device_key)
-    username = "{}/{}/?api-version=2018-06-30".format(hostname, device_id)
+    username = f"{hostname}/{device_id}/?api-version=2018-06-30"
     password = _generate_sas_token(hostname, device_key)
 
     return username, password
@@ -72,12 +72,12 @@ def _retrieve_hostname(scope_id, device_id, device_key):
     """
     # Get the authentication token for the requests
     expiration = int(time() + 30)
-    resource = "{}%2Fregistrations%2F{}".format(scope_id, device_id)
+    resource = f"{scope_id}%2Fregistrations%2F{device_id}"
     auth_token = _generate_sas_token(resource, device_key, expiration)
     auth_token += "&skn=registration"
 
     # Set up the initial HTTP request
-    endpoint = "{}/{}/registrations/{}/".format(AZURE_DPS_ENDPOINT, scope_id, device_id)
+    endpoint = f"{AZURE_DPS_ENDPOINT}/{scope_id}/registrations/{device_id}/"
     registration = "register?api-version=2018-11-01"
     headers = {
         "Accept": "application/json",
@@ -97,7 +97,7 @@ def _retrieve_hostname(scope_id, device_id, device_key):
     # Continue checking device's registration status until it resolves
     while data.get("status") == "assigning" and result.ok:
         operation_id = data.get("operationId")
-        operation = "operations/{}?api-version=2018-11-01".format(operation_id)
+        operation = f"operations/{operation_id}?api-version=2018-11-01"
 
         result = requests.get(endpoint + operation, headers=headers)
         data = json.loads(result.text)
@@ -123,15 +123,11 @@ def _generate_sas_token(resource, device_key, expiration=None):
     if not expiration:
         expiration = int(time() + AZURE_TOKEN_EXPIRATION)
 
-    sign_key = "{}\n{}".format(resource, expiration)
+    sign_key = f"{resource}\n{expiration}"
     signature = b64encode((HMAC(b64decode(device_key.encode("utf-8")), sign_key.encode("utf-8"), sha256).digest()))
     signature = quote(signature)
 
-    return "SharedAccessSignature sr={}&sig={}&se={}".format(
-        resource,
-        signature,
-        expiration
-    )
+    return f"SharedAccessSignature sr={resource}&sig={signature}&se={expiration}"
 
 if __name__ == "__main__":
     main()

@@ -80,10 +80,7 @@ def str_to_hex(s):
     return int(s.replace("0x", ''), 16)
 
 def is_sub_string(s1, s2):
-    tag = False
-    if s2.find(s1) != -1:
-        tag = True
-    return tag
+    return s2.find(s1) != -1
 
 def list_all_member(module):
     print ("----------------------------------------------------------------\n\
@@ -139,11 +136,14 @@ def load_config(config_file, seg_tbl, pse_image_info):
         for trace_level in module.iter('TRACE_LEVEL'):
             pse_module_info.manifest.trace_level = (int)(trace_level.text)
         for load_addr in module.iter('LOAD_ADDR'):
-            pse_module_info.manifest.load_address = str_to_hex(load_addr.text)
-            for seg in seg_tbl:
-                if comp_name.text == seg.seg_name:
-                    pse_module_info.manifest.load_address = seg.seg_start
-                    break
+            pse_module_info.manifest.load_address = next(
+                (
+                    seg.seg_start
+                    for seg in seg_tbl
+                    if comp_name.text == seg.seg_name
+                ),
+                str_to_hex(load_addr.text),
+            )
         modules_array.append(pse_module_info)
     pse_image_info.module_count = count
     print ("\r----------------------------------------------------------------\n\
@@ -175,7 +175,7 @@ def generate_manifest(image_info):
         else:
             cur_off = cur_off + module_sz
         if (image_info.module_info[i].manifest.comp_name == "BRINGUP"):
-            if 0 == i:
+            if i == 0:
                 bBupFound = True
             else:
                 print ("Bringup.bin found, but template xml corrupted!")
@@ -207,7 +207,7 @@ def generate_fw(image_info, f_output):
     """ written header + manifest structure into byte array """
     for i in range(image_info.module_count):
         if is_sub_string("bringup", image_info.module_info[i].raw_bin_path):
-            if 0 != i:
+            if i != 0:
                 print ("ERROR: Bad image table! Stitching stopped!")
                 return
             bringup_path = image_info.module_info[i].raw_bin_path
@@ -268,10 +268,9 @@ def generate_fw(image_info, f_output):
         f_path = image_info.module_info[i].raw_bin_path
         if image_info.module_info[i].manifest.comp_name != "BRINGUP":
             f_output.truncate(image_info.module_info[i].manifest.code_offset)
-            f_in = open(image_info.module_info[i].raw_bin_path, 'rb')
-            f_output.seek(0, 2)    # Move to the end of the file
-            f_output.write(f_in.read(image_info.module_info[i].manifest.module_size))
-            f_in.close()
+            with open(image_info.module_info[i].raw_bin_path, 'rb') as f_in:
+                f_output.seek(0, 2)    # Move to the end of the file
+                f_output.write(f_in.read(image_info.module_info[i].manifest.module_size))
         list_all_member(image_info.module_info[i])
         print ("Stitched: %s to %x" %(f_path, image_info.module_info[i].manifest.code_offset))
 
@@ -290,22 +289,19 @@ def map_check():
     iccm_length = 0
     dccm_length = 0
     for line in f_map:
-        match = iccm_re.match(line.rstrip())
-        if match:
+        if match := iccm_re.match(line.rstrip()):
             iccm_origin = int(match.group(2), 16)
             iccm_length = int(match.group(3), 16)
             print("found ICCM (0x%x,\t0x%x)" % (iccm_origin, iccm_length))
             continue
 
-        match = dccm_re.match(line)
-        if match:
+        if match := dccm_re.match(line):
             dccm_origin = int(match.group(1), 16)
             dccm_length = int(match.group(2), 16)
             print("found DCCM (0x%x,\t0x%x)" % (dccm_origin, dccm_length))
             continue
 
-        match = re.search('0x([0-9a-f]+)\s+_vector_table', line)
-        if match:
+        if match := re.search('0x([0-9a-f]+)\s+_vector_table', line):
             entry_point = int(match.group(1), 16)
             print('found vector table @ 0x%X' %entry_point)
             break
